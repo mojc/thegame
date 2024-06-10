@@ -55,18 +55,23 @@ class GameState:
         # Check if the game is won (all cards played)
         return len(self.deck) == 0 and all(len(hand) == 0 for hand in self.hands)
 
-    def get_possible_moves(self, player):
+    def get_possible_moves(self, player, piles=None):
         # Generate all possible moves for a player
+        if piles is None:
+            piles = self.piles.keys()
+        
         possible_moves = []
         for card in self.hands[player]:
-            for pile in self.piles:
+            for pile in piles:
                 if self.is_valid_move(card, pile):
                     possible_moves.append((card, pile))
         return possible_moves
 
-    def find_closest_move(self, player):
+    def find_closest_move(self, player, piles=None):
         # Find the optimal move based on the smallest distance to the piles
-        possible_moves = self.get_possible_moves(player)
+        if piles is None:
+            piles = self.piles.keys()
+        possible_moves = self.get_possible_moves(player, piles)
         if not possible_moves:
             return None
         possible_moves.sort(key=lambda move: self.calculate_distance(move[0], move[1]))
@@ -125,8 +130,9 @@ def basic_game(num_players):
     print(f"Cards left: {len(game_state.deck) + sum([len(hand) for hand in game_state.hands])}")
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
 
-def lower_than_game(num_players, threshold):
+def lower_than_game(num_players, threshold, reserve=True):
     game_state = GameState(num_players)
+    # print(game_state)
     game_lost = False
 
     while not game_state.is_winning_state() and not game_lost:
@@ -140,14 +146,32 @@ def lower_than_game(num_players, threshold):
                 break  # No valid moves available, the game is lost
             card, pile = closest_move
             game_state.play_card(current_player, card, pile)
+            # print(current_player, card, pile)
             cards_played += 1
 
         while game_state.find_closest_move(current_player):
-            card, pile = game_state.find_closest_move(current_player)
+            _piles = game_state.piles.copy()
+            if reserve:
+                for player in range(len(game_state.hands)):
+                    try:
+                        _card, _pile = game_state.find_closest_move(player)
+                    except TypeError:
+                        pass
+                    # remove that pile from options when somebody else has a better card
+                    if game_state.calculate_distance(_card, _pile) <= threshold:
+                        try:
+                            _piles.pop(_pile)
+                        except KeyError:
+                            pass
+            try:
+                card, pile = game_state.find_closest_move(current_player, piles=_piles)
+            except TypeError:
+                break
             if game_state.calculate_distance(card, pile) >= threshold:
                 break
             elif game_state.calculate_distance(card, pile):
                 game_state.play_card(current_player, card, pile)
+                # print(current_player, card, pile)
                 cards_played += 1
 
         if not game_lost:
@@ -189,3 +213,19 @@ for i in [1, 2, 3, 4, 5]:
 # Average number of cards left: 17.86021
 # Number of wins: 453 in 100000 games (0.453)
     
+# with pile reservation
+# -----thereshold: 1
+# Average number of cards left: 23.2578
+# Number of wins: 58 in 10000 games (0.58)
+# -----thereshold: 2
+# Average number of cards left: 23.1256
+# Number of wins: 57 in 10000 games (0.5700000000000001)
+# -----thereshold: 3
+# Average number of cards left: 23.3995
+# Number of wins: 48 in 10000 games (0.48)
+# -----thereshold: 4
+# Average number of cards left: 23.2027
+# Number of wins: 60 in 10000 games (0.6)
+# -----thereshold: 5
+# Average number of cards left: 22.9744
+# Number of wins: 55 in 10000 games (0.5499999999999999)
