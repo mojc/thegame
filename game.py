@@ -122,10 +122,12 @@ def basic_game(num_players):
         print("You won!")
     else:
         print("No more valid moves available. You lost.")
-    # breakpoint()
     print(f"Cards left: {len(game_state.deck) + sum([len(hand) for hand in game_state.hands])}")
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
 
 
 results = [basic_game(3) for game in range(1000)]
-print(sum(results) / len(results))
+
+print('Average number of cards left:', sum(results) / len(results))
+print(f'Number of wins: {results.count(0)} in {len(results)} games ({results.count(0)/len(results) * 100 })')
+# 0.5% wins with 23 cards left on average for a 3 player basic game
