@@ -1,17 +1,19 @@
 import random
 
 class GameState:
-    def __init__(self, num_players):
+    def __init__(self, num_players, hps=None):
         self.deck = self.initialize_deck()
         self.hands = self.deal_hands(num_players)
-        self.piles = {
-            'asc1': 1,
-            'asc2': 1,
-            'desc1': 100,
-            'desc2': 100
+        self.empty_piles = {
+            'asc1': {'value':1, 'bookings': [0 for _ in range(num_players)]},
+            'asc2': {'value':1, 'bookings': [0 for _ in range(num_players)]},
+            'desc1': {'value':100, 'bookings': [0 for _ in range(num_players)]},
+            'desc2': {'value':100, 'bookings': [0 for _ in range(num_players)]},
         }
+        self.piles = self.empty_piles.copy()
         self.played_cards = []
         self.current_player = 0
+        self.hps = hps
 
     def initialize_deck(self):
         # Initialize the deck with cards from 2 to 99 and shuffle
@@ -29,7 +31,7 @@ class GameState:
 
     def is_valid_move(self, card, pile):
         # Check if a card can be played on the specified pile
-        top_card = self.piles[pile]
+        top_card = self.piles[pile]['value']
         if pile.startswith('asc'):
             return card > top_card or card == top_card - 10
         elif pile.startswith('desc'):
@@ -39,7 +41,8 @@ class GameState:
     def play_card(self, player, card, pile):
         # Play a card on the specified pile if the move is valid
         if self.is_valid_move(card, pile):
-            self.piles[pile] = card
+            self.piles[pile]['value'] = card
+            self.piles[pile]['bookings'] = [0 for _ in range(len(self.hands))]
             self.hands[player].remove(card)
             self.played_cards.append(card)
             return True
@@ -59,7 +62,7 @@ class GameState:
         # Generate all possible moves for a player
         if piles is None:
             piles = self.piles.keys()
-        
+
         possible_moves = []
         for card in self.hands[player]:
             for pile in piles:
@@ -77,12 +80,14 @@ class GameState:
         possible_moves.sort(key=lambda move: self.calculate_distance(move[0], move[1]))
         return possible_moves[0]
 
-    def calculate_distance(self, card, pile):
-        top_card = self.piles[pile]
+    def calculate_distance(self, card, pile, bookings=False):
+        top_card = self.piles[pile]['value']
+        booking_penalty = self.hps['booking_penalties'][max(self.piles[pile]['bookings'])] if bookings else 0
         if pile.startswith('asc'):
-            return card - top_card
+            d = card - top_card
         elif pile.startswith('desc'):
-            return top_card - card 
+            d = top_card - card
+        return d + booking_penalty
 
     def end_turn(self, player, cards_played):
         self.draw_cards(player, cards_played)
@@ -93,13 +98,50 @@ class GameState:
         # Reset the state of the environment to an initial state
         self.deck = self.initialize_deck()
         self.hands = self.deal_hands(len(self.hands))
-        self.piles = {'asc1': 1, 'asc2': 1, 'desc1': 100, 'desc2': 100}
+        self.piles = self.empty_piles
         self.played_cards = []
         self.current_player = 0
 
     def __repr__(self):
         return (f"Piles: {self.piles}, Hands: {self.hands}, Deck: {len(self.deck)} cards, "
                 f"Current Player: {self.current_player}")
+
+    def level_from_value(self, value):
+        if value == -10:
+            return 3
+        if value < 5:
+            return 2
+        elif value < 12:
+            return 1
+        return 0
+
+    def update_bookings(self):
+        for i, hand in enumerate(self.hands):
+            for key, pile in self.piles.items():
+                for card in hand:
+                    play_value = self.calculate_distance(card, key)
+                    if play_value > 0 or play_value == -10:
+                        play_value_level = self.level_from_value(play_value)
+                        if play_value_level > self.piles[key]['bookings'][i]:
+                            self.piles[key]['bookings'][i] = play_value_level
+
+    def find_best_move(self, player):
+        piles = self.piles.keys()
+
+        possible_moves = []
+        for card in self.hands[player]:
+            for pile in piles:
+                if self.is_valid_move(card, pile):
+                    cost = self.calculate_distance(card, pile, bookings=True)
+                    possible_moves.append((card, pile, cost))
+
+        if not possible_moves:
+            return None
+
+        possible_moves.sort(key=lambda move: move[2])
+        return possible_moves[0]
+
+
 
 def basic_game(num_players):
     game_state = GameState(num_players)
@@ -130,9 +172,10 @@ def basic_game(num_players):
     print(f"Cards left: {len(game_state.deck) + sum([len(hand) for hand in game_state.hands])}")
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
 
+
 def lower_than_game(num_players, threshold, reserve=True):
     game_state = GameState(num_players)
-    # print(game_state)
+    print(game_state)
     game_lost = False
 
     while not game_state.is_winning_state() and not game_lost:
@@ -186,46 +229,58 @@ def lower_than_game(num_players, threshold, reserve=True):
     # print(f"Cards left: {len(game_state.deck) + sum([len(hand) for hand in game_state.hands])}")
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
 
+
 # results = [basic_game(3) for game in range(1000)]
 # print('Average number of cards left:', sum(results) / len(results))
 # print(f'Number of wins: {results.count(0)} in {len(results)} games ({results.count(0)/len(results) * 100 })')
 # 0.5% wins with 23 cards left on average for a 3 player basic game
 
-for i in [1, 2, 3, 4, 5]:
-    print(f'-----thereshold: {i}')
-    results = [lower_than_game(3, i) for game in range(1000)]
-    print('Average number of cards left:', sum(results) / len(results))
-    print(f'Number of wins: {results.count(0)} in {len(results)} games ({results.count(0)/len(results) * 100 })')
 
-# -----thereshold: 1
-# Average number of cards left: 21.39399
-# Number of wins: 893 in 100000 games (0.893)
-# -----thereshold: 2
-# Average number of cards left: 19.67339
-# Number of wins: 752 in 100000 games (0.752)
-# -----thereshold: 3
-# Average number of cards left: 18.60887
-# Number of wins: 667 in 100000 games (0.6669999999999999)
-# -----thereshold: 4
-# Average number of cards left: 17.98131
-# Number of wins: 513 in 100000 games (0.513)
-# -----thereshold: 5
-# Average number of cards left: 17.86021
-# Number of wins: 453 in 100000 games (0.453)
-    
-# with pile reservation
-# -----thereshold: 1
-# Average number of cards left: 23.2578
-# Number of wins: 58 in 10000 games (0.58)
-# -----thereshold: 2
-# Average number of cards left: 23.1256
-# Number of wins: 57 in 10000 games (0.5700000000000001)
-# -----thereshold: 3
-# Average number of cards left: 23.3995
-# Number of wins: 48 in 10000 games (0.48)
-# -----thereshold: 4
-# Average number of cards left: 23.2027
-# Number of wins: 60 in 10000 games (0.6)
-# -----thereshold: 5
-# Average number of cards left: 22.9744
-# Number of wins: 55 in 10000 games (0.5499999999999999)
+def game_with_bookings(num_players, hps):
+    game_state = GameState(num_players, hps)
+    print(game_state)
+    game_lost = False
+
+    while not game_state.is_winning_state() and not game_lost:
+        current_player = game_state.current_player
+        cards_played = 0
+
+        while cards_played < 2 or (len(game_state.deck) == 0 and cards_played < 1):
+            # find best move
+            try:
+                card, pile, cost = game_state.find_best_move(current_player)
+            except TypeError:
+                game_lost = True
+                break
+
+            # discussion
+            print(game_state.hands[game_state.current_player])
+            game_state.play_card(current_player, card, pile)
+            game_state.update_bookings()
+            print(current_player, card, pile)
+            print(game_state.hands)
+            print(game_state.piles)
+
+            cards_played += 1
+
+        if not game_lost:
+            game_state.end_turn(current_player, cards_played)
+
+    return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
+
+hyperparameters = {
+    'booking_penalties': {
+        0: 0,
+        1: 5,
+        2: 10,
+        3: 20
+    }
+}
+
+if __name__ == "__main__":
+    random.seed(42)
+    num_players = 4
+    print(f'-----hps: {hyperparameters}')
+    results = [game_with_bookings(num_players, hps=hyperparameters) for game in range(1000)]
+    print('Average number of cards left:', sum(results) / len(results))
+    print(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100})')
