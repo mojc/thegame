@@ -254,7 +254,7 @@ def game_with_bookings(num_players, hps):
                 break
 
             # discussion
-            #print(game_state.hands[game_state.current_player])
+            print(game_state.hands[game_state.current_player])
             game_state.play_card(current_player, card, pile)
             game_state.update_bookings()
             print(current_player, card, pile)
@@ -268,9 +268,7 @@ def game_with_bookings(num_players, hps):
 
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
 
-
 hyperparameters = {
-    'additional_play_limit': 10,
     'booking_penalties': {
         0: 0,
         1: 5,
@@ -283,6 +281,6 @@ if __name__ == "__main__":
     random.seed(42)
     num_players = 4
     print(f'-----hps: {hyperparameters}')
-    results = [game_with_bookings(num_players, hps=hyperparameters) for game in range(100)]
+    results = [game_with_bookings(num_players, hps=hyperparameters) for game in range(1000)]
     print('Average number of cards left:', sum(results) / len(results))
     print(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100})')
