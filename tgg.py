@@ -1,5 +1,5 @@
 import random
-from tg_str import Player
+from player import Player
 
 class GameState:
     def __init__(self, num_players, hps=None):
@@ -152,7 +152,6 @@ def game(num_players):
         print("No more valid moves available. You lost.")
     print(f"Cards left: {len(game_state.deck) + sum([len(hand) for hand in game_state.hands])}")
     return len(game_state.deck) + sum([len(hand) for hand in game_state.hands])
-
 
 
 if __name__ == "__main__":

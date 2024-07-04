@@ -1,8 +1,5 @@
-
-from tg import GameState
+from game import GameState
 import random
-
-
 
 def test_update_bookings():
     gs = GameState(2)
@@ -39,6 +36,7 @@ def test_calculate_distance():
 def test_smart_play():
     gs = GameState(2)
     gs.piles['asc1'] = {'value': 5, 'bookings': [1, 2]}
+    gs.piles['asc2'] = {'value': 3, 'bookings': [1, 2]}
     gs.current_player = 0
     gs.hands = [[4, 9, 14, 97, 98, 99], [8, 12, 34, 35, 36, 37]]
 
@@ -47,4 +45,3 @@ def test_smart_play():
     # 1. 9 -> asc1
     # 2. 14 -> asc1
     # 3. 4 -> asc1
-
