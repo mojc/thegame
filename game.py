@@ -21,9 +21,10 @@ class GameState:
         random.shuffle(deck)
         return deck
 
-    def deal_hands(self, num_players, hand_size=6):
+    def deal_hands(self, num_players):
         # Deal hands to each player
         hands = []
+        hand_size = 8 if num_players == 1 else 7 if num_players == 2 else 6
         for _ in range(num_players):
             hand = [self.deck.pop() for _ in range(hand_size)]
             hands.append(hand)
