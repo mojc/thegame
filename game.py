@@ -119,13 +119,15 @@ class StandardGameRules(GameRules):
 
     def update_bookings(self, game_state):
         for i, player in enumerate(game_state.players):
-            for pile in game_state.piles.values():
+            for pile_name, pile in game_state.piles.items():
                 for card in player.hand:
                     play_value = self.calculate_distance(card, pile)
                     if play_value > 0 or play_value == -10:
                         play_value_level = self.level_from_value(play_value)
                         if play_value_level > pile.bookings[i]:
                             pile.bookings[i] = play_value_level
+                            # Log the booking
+                            print(f"Player {i} booked pile {pile_name} with level {play_value_level}")
 
     def find_best_move(self, player, game_state):
         possible_moves = []
@@ -150,6 +152,8 @@ class GameEngine:
     def play_card(self, card, pile_name):
         pile = self.game_state.piles[pile_name]
         if self.rules.is_valid_move(card, pile):
+            current_player_index = self.game_state.current_player_index
+            print(f"Player {current_player_index} playing card {card.value} on pile {pile_name} (current value: {pile.value})")
             pile.value = card.value
             pile.reset()
             self.game_state.current_player.hand.remove(card)
@@ -168,6 +172,10 @@ class GameEngine:
         game_lost = False
 
         while not self.is_winning_state() and not game_lost:
+            current_player_index = self.game_state.current_player_index
+            current_player_hand = [c.value for c in self.game_state.current_player.hand]
+            print(f"Starting turn with hand: {current_player_hand} (Player {current_player_index}) ")
+
             cards_played = 0
 
             while True:
@@ -186,8 +194,20 @@ class GameEngine:
                 self.rules.update_bookings(self.game_state)
                 cards_played += 1
 
+            # Log the bookings at the end of the player's turn
+            print(f"End of Player {current_player_index}'s turn. Current bookings:")
+            for pile_name, pile in self.game_state.piles.items():
+                print(f"  Pile {pile_name}: {pile.bookings}")
+
             if not game_lost:
                 self.end_turn(cards_played)
+
+        # Log the game result
+        if self.is_winning_state():
+            print("Game won! All cards have been played.")
+        else:
+            remaining_cards = len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
+            print(f"Game lost. Cards remaining: {remaining_cards}")
 
         return len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
 
@@ -211,6 +231,6 @@ if __name__ == "__main__":
         'max_cost_threshold': 5  # Add max_cost_threshold to hyperparameters
     }
     print(f'-----hps: {hyperparameters}')
-    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1000)]
+    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1)]
     print('Average number of cards left:', sum(results) / len(results))
     print(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
