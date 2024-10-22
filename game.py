@@ -142,9 +142,10 @@ class StandardGameRules(GameRules):
         return possible_moves[0]
 
 class GameEngine:
-    def __init__(self, game_state, rules):
+    def __init__(self, game_state, rules, max_cost_threshold):
         self.game_state = game_state
         self.rules = rules
+        self.max_cost_threshold = max_cost_threshold
 
     def play_card(self, card, pile_name):
         pile = self.game_state.piles[pile_name]
@@ -169,7 +170,7 @@ class GameEngine:
         while not self.is_winning_state() and not game_lost:
             cards_played = 0
 
-            while cards_played < 2:
+            while True:
                 best_move = self.rules.find_best_move(self.game_state.current_player, self.game_state)
                 if not best_move:
                     if len(self.game_state.deck) == 0 and cards_played > 0:
@@ -177,7 +178,10 @@ class GameEngine:
                     game_lost = True
                     break
 
-                card, pile_name, _ = best_move
+                card, pile_name, cost = best_move
+                if cards_played >= 2 and cost > self.max_cost_threshold:
+                    break
+
                 self.play_card(card, pile_name)
                 self.rules.update_bookings(self.game_state)
                 cards_played += 1
@@ -190,7 +194,8 @@ class GameEngine:
 def run_game_with_bookings(num_players, hps):
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
-    engine = GameEngine(game_state, rules)
+    max_cost_threshold = hps.get('max_cost_threshold', 5)  # Default to 5 if not specified
+    engine = GameEngine(game_state, rules, max_cost_threshold)
     return engine.play_game()
 
 if __name__ == "__main__":
@@ -202,7 +207,8 @@ if __name__ == "__main__":
             1: 5,
             2: 10,
             3: 20
-        }
+        },
+        'max_cost_threshold': 5  # Add max_cost_threshold to hyperparameters
     }
     print(f'-----hps: {hyperparameters}')
     results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1000)]
