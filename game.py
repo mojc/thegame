@@ -100,22 +100,12 @@ class StandardGameRules(GameRules):
     def calculate_distance(self, card, pile, bookings=False):
         booking_penalty = 0
         if bookings and pile.bookings:
-            max_booking = max(pile.bookings)
-            booking_penalty = self.hps.get('booking_penalties', {}).get(max_booking, 0)
+            booking_penalty = max(pile.bookings)
         if pile.is_ascending:
             d = card.value - pile.value
         else:
             d = pile.value - card.value
         return d + booking_penalty
-
-    def level_from_value(self, value):
-        if value == -10:
-            return 3
-        if value < 5:
-            return 2
-        elif value < 12:
-            return 1
-        return 0
 
     def update_bookings(self, game_state):
         for i, player in enumerate(game_state.players):
@@ -123,11 +113,12 @@ class StandardGameRules(GameRules):
                 for card in player.hand:
                     play_value = self.calculate_distance(card, pile)
                     if play_value > 0 or play_value == -10:
-                        play_value_level = self.level_from_value(play_value)
-                        if play_value_level > pile.bookings[i]:
-                            pile.bookings[i] = play_value_level
+                        # Determine penalty based on distance
+                        penalty = next((penalty for distance, penalty in sorted(self.hps['booking_penalties'].items()) if play_value < distance), 0)
+                        if penalty > pile.bookings[i]:
+                            pile.bookings[i] = penalty
                             # Log the booking
-                            print(f"Player {i} booked pile {pile_name} with level {play_value_level}")
+                            print(f"Player {i} booked pile {pile_name} with penalty {penalty}")
 
     def find_best_move(self, player, game_state):
         possible_moves = []
@@ -222,15 +213,14 @@ if __name__ == "__main__":
     random.seed(42)
     num_players = 4
     hyperparameters = {
-        'booking_penalties': {
-            0: 0,
-            1: 5,
-            2: 10,
-            3: 20
+        'booking_penalties': { # distance (<):s penalty
+            -9: 20,
+            5: 10,
+            12: 5,
         },
         'max_cost_threshold': 5  # Add max_cost_threshold to hyperparameters
     }
     print(f'-----hps: {hyperparameters}')
-    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1)]
+    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1000)]
     print('Average number of cards left:', sum(results) / len(results))
     print(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
