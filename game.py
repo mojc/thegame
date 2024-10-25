@@ -213,18 +213,56 @@ def run_game_with_bookings(num_players, hps):
     engine = GameEngine(game_state, rules, max_cost_threshold)
     return engine.play_game()
 
+def run_experiments(num_players, hyperparameter_sets):
+    best_hyperparameters = None
+    best_result = float('inf')  # Start with a high number of cards left
+
+    for hps in hyperparameter_sets:
+        logging.info(f'Testing hyperparameters: {hps}')
+        results = [run_game_with_bookings(num_players, hps=hps) for _ in range(1000)]
+        average_cards_left = sum(results) / len(results)
+        logging.info('Average number of cards left: %s', average_cards_left)
+        logging.info(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
+
+        if average_cards_left < best_result:
+            best_result = average_cards_left
+            best_hyperparameters = hps
+
+    logging.info(f'Best hyperparameters: {best_hyperparameters} with average cards left: {best_result}')
+    return best_hyperparameters, best_result
+
 if __name__ == "__main__":
     random.seed(42)
     num_players = 4
-    hyperparameters = {
-        'booking_penalties': { # distance (<):s penalty
-            -9: 20,
-            5: 10,
-            12: 5,
+    hyperparameter_sets = [
+        {
+            'booking_penalties': {-9: 20, 5: 10, 12: 5},
+            'max_cost_threshold': 8
         },
-        'max_cost_threshold': 5  # Add max_cost_threshold to hyperparameters
-    }
-    logging.info(f'-----hps: {hyperparameters}')
-    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1000)]
-    logging.info('Average number of cards left: %s', sum(results) / len(results))
-    logging.info(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
+        {
+            'booking_penalties': {-9: 15, 5: 8, 12: 4},
+            'max_cost_threshold': 6
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 6
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 8
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 8
+        },
+        {
+            'booking_penalties': {-9: 10, 6: 5, 15: 2},
+            'max_cost_threshold': 10
+        },
+        {
+            'booking_penalties': {-9: 8, 7: 3, 14: 1},
+            'max_cost_threshold': 4
+        },
+        # Add more hyperparameter sets as needed
+    ]
+    best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
