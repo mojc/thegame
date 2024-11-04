@@ -1,5 +1,9 @@
 import random
+import logging
 from abc import ABC, abstractmethod
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 class Card:
     def __init__(self, value):
@@ -100,32 +104,25 @@ class StandardGameRules(GameRules):
     def calculate_distance(self, card, pile, bookings=False):
         booking_penalty = 0
         if bookings and pile.bookings:
-            max_booking = max(pile.bookings)
-            booking_penalty = self.hps.get('booking_penalties', {}).get(max_booking, 0)
+            booking_penalty = max(pile.bookings)
         if pile.is_ascending:
             d = card.value - pile.value
         else:
             d = pile.value - card.value
         return d + booking_penalty
 
-    def level_from_value(self, value):
-        if value == -10:
-            return 3
-        if value < 5:
-            return 2
-        elif value < 12:
-            return 1
-        return 0
-
     def update_bookings(self, game_state):
         for i, player in enumerate(game_state.players):
-            for pile in game_state.piles.values():
+            for pile_name, pile in game_state.piles.items():
                 for card in player.hand:
                     play_value = self.calculate_distance(card, pile)
                     if play_value > 0 or play_value == -10:
-                        play_value_level = self.level_from_value(play_value)
-                        if play_value_level > pile.bookings[i]:
-                            pile.bookings[i] = play_value_level
+                        # Determine penalty based on distance
+                        penalty = next((penalty for distance, penalty in sorted(self.hps['booking_penalties'].items()) if play_value < distance), 0)
+                        if penalty > pile.bookings[i]:
+                            pile.bookings[i] = penalty
+                            # Log the booking
+                            logging.debug(f"Player {i} booked pile {pile_name} with penalty {penalty}")
 
     def find_best_move(self, player, game_state):
         possible_moves = []
@@ -142,13 +139,16 @@ class StandardGameRules(GameRules):
         return possible_moves[0]
 
 class GameEngine:
-    def __init__(self, game_state, rules):
+    def __init__(self, game_state, rules, max_cost_threshold):
         self.game_state = game_state
         self.rules = rules
+        self.max_cost_threshold = max_cost_threshold
 
     def play_card(self, card, pile_name):
         pile = self.game_state.piles[pile_name]
         if self.rules.is_valid_move(card, pile):
+            current_player_index = self.game_state.current_player_index
+            logging.debug(f"Player {current_player_index} playing card {card.value} on pile {pile_name} (current value: {pile.value})")
             pile.value = card.value
             pile.reset()
             self.game_state.current_player.hand.remove(card)
@@ -167,9 +167,13 @@ class GameEngine:
         game_lost = False
 
         while not self.is_winning_state() and not game_lost:
+            current_player_index = self.game_state.current_player_index
+            current_player_hand = [c.value for c in self.game_state.current_player.hand]
+            logging.debug(f"Starting turn with hand: {current_player_hand} (Player {current_player_index}) ")
+
             cards_played = 0
 
-            while cards_played < 2:
+            while True:
                 best_move = self.rules.find_best_move(self.game_state.current_player, self.game_state)
                 if not best_move:
                     if len(self.game_state.deck) == 0 and cards_played > 0:
@@ -177,34 +181,88 @@ class GameEngine:
                     game_lost = True
                     break
 
-                card, pile_name, _ = best_move
+                card, pile_name, cost = best_move
+                if cards_played >= 2 and cost > self.max_cost_threshold:
+                    break
+
                 self.play_card(card, pile_name)
                 self.rules.update_bookings(self.game_state)
                 cards_played += 1
 
+            # Log the bookings at the end of the player's turn
+            logging.debug(f"End of Player {current_player_index}'s turn. Current bookings:")
+            for pile_name, pile in self.game_state.piles.items():
+                logging.debug(f"  Pile {pile_name}: {pile.bookings}")
+
             if not game_lost:
                 self.end_turn(cards_played)
+
+        # Log the game result
+        if self.is_winning_state():
+            logging.debug("Game won! All cards have been played.")
+        else:
+            remaining_cards = len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
+            logging.debug(f"Game lost. Cards remaining: {remaining_cards}")
 
         return len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
 
 def run_game_with_bookings(num_players, hps):
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
-    engine = GameEngine(game_state, rules)
+    max_cost_threshold = hps.get('max_cost_threshold', 5)  # Default to 5 if not specified
+    engine = GameEngine(game_state, rules, max_cost_threshold)
     return engine.play_game()
+
+def run_experiments(num_players, hyperparameter_sets):
+    best_hyperparameters = None
+    best_result = float('inf')  # Start with a high number of cards left
+
+    for hps in hyperparameter_sets:
+        logging.info(f'Testing hyperparameters: {hps}')
+        results = [run_game_with_bookings(num_players, hps=hps) for _ in range(1000)]
+        average_cards_left = sum(results) / len(results)
+        logging.info('Average number of cards left: %s', average_cards_left)
+        logging.info(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
+
+        if average_cards_left < best_result:
+            best_result = average_cards_left
+            best_hyperparameters = hps
+
+    logging.info(f'Best hyperparameters: {best_hyperparameters} with average cards left: {best_result}')
+    return best_hyperparameters, best_result
 
 if __name__ == "__main__":
     random.seed(42)
     num_players = 4
-    hyperparameters = {
-        'booking_penalties': {
-            0: 0,
-            1: 5,
-            2: 10,
-            3: 20
-        }
-    }
-    print(f'-----hps: {hyperparameters}')
-    results = [run_game_with_bookings(num_players, hps=hyperparameters) for _ in range(1000)]
-    print('Average number of cards left:', sum(results) / len(results))
-    print(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
+    hyperparameter_sets = [
+        {
+            'booking_penalties': {-9: 20, 5: 10, 12: 5},
+            'max_cost_threshold': 8
+        },
+        {
+            'booking_penalties': {-9: 15, 5: 8, 12: 4},
+            'max_cost_threshold': 6
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 6
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 8
+        },
+        {
+            'booking_penalties': {-9: 10, 7: 5, 14: 2},
+            'max_cost_threshold': 8
+        },
+        {
+            'booking_penalties': {-9: 10, 6: 5, 15: 2},
+            'max_cost_threshold': 10
+        },
+        {
+            'booking_penalties': {-9: 8, 7: 3, 14: 1},
+            'max_cost_threshold': 4
+        },
+        # Add more hyperparameter sets as needed
+    ]
+    best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
