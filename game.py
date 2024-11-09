@@ -186,8 +186,11 @@ class GameEngine:
                     break
 
                 card, pile_name, cost = best_move
-                if cards_played >= 2 and cost > self.max_cost_threshold:
-                    break
+                if cards_played >= 2:
+                    if not self.max_cost_threshold:
+                        break
+                    elif cost > self.max_cost_threshold:
+                        break
 
                 self.play_card(card, pile_name)
                 self.rules.update_bookings(self.game_state)
@@ -213,7 +216,7 @@ class GameEngine:
 def run_game(num_players, hps):
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
-    max_cost_threshold = hps.get('max_cost_threshold', 5)  # Default to 5 if not specified
+    max_cost_threshold = hps.get('max_cost_threshold')  # Default to 5 if not specified
     engine = GameEngine(game_state, rules, max_cost_threshold)
     return engine.play_game()
 
@@ -271,8 +274,8 @@ if __name__ == "__main__":
     ]
     # best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
     
-    best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
-    # best_hp = {'max_cost_threshold': 8}
+    # best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
+    best_hp = {}
     run_game(4, best_hp)
     
 
