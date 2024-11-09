@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
 class Card:
     def __init__(self, value):
@@ -80,7 +80,7 @@ class GameRules(ABC):
         pass
 
     @abstractmethod
-    def calculate_distance(self, card, pile, bookings=False):
+    def calculate_distance(self, card, pile):
         pass
 
     @abstractmethod
@@ -101,35 +101,39 @@ class StandardGameRules(GameRules):
         else:
             return card.value < pile.value or card.value == pile.value + 10
 
-    def calculate_distance(self, card, pile, bookings=False):
-        booking_penalty = 0
-        if bookings and pile.bookings:
-            booking_penalty = max(pile.bookings)
+    def calculate_distance(self, card, pile):
         if pile.is_ascending:
             d = card.value - pile.value
         else:
             d = pile.value - card.value
-        return d + booking_penalty
+        return d
 
     def update_bookings(self, game_state):
-        for i, player in enumerate(game_state.players):
-            for pile_name, pile in game_state.piles.items():
-                for card in player.hand:
-                    play_value = self.calculate_distance(card, pile)
-                    if play_value > 0 or play_value == -10:
-                        # Determine penalty based on distance
-                        penalty = next((penalty for distance, penalty in sorted(self.hps['booking_penalties'].items()) if play_value < distance), 0)
-                        if penalty > pile.bookings[i]:
-                            pile.bookings[i] = penalty
-                            # Log the booking
-                            logging.debug(f"Player {i} booked pile {pile_name} with penalty {penalty}")
+        if not self.hps.get('booking_penalties'):
+            pass
+        else:
+            for i, player in enumerate(game_state.players):
+                for pile_name, pile in game_state.piles.items():
+                    for card in player.hand:
+                        play_value = self.calculate_distance(card, pile)
+                        if play_value > 0 or play_value == -10:
+                            # Determine penalty based on distance
+                            penalty = next((penalty for distance, penalty in sorted(self.hps['booking_penalties'].items()) if play_value < distance), 0)
+                            if penalty > pile.bookings[i]:
+                                pile.bookings[i] = penalty
+                                # Log the booking
+                                logging.debug(f"Player {i} booked pile {pile_name} with penalty {penalty}")
 
     def find_best_move(self, player, game_state):
         possible_moves = []
         for card in player.hand:
             for pile_name, pile in game_state.piles.items():
                 if self.is_valid_move(card, pile):
-                    cost = self.calculate_distance(card, pile, bookings=True)
+                    cost = self.calculate_distance(card, pile)
+                    booking_penalty = 0
+                    # if pile.bookings:
+                    booking_penalty = max(pile.bookings)
+                    cost += booking_penalty
                     possible_moves.append((card, pile_name, cost))
 
         if not possible_moves:
@@ -206,7 +210,7 @@ class GameEngine:
 
         return len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
 
-def run_game_with_bookings(num_players, hps):
+def run_game(num_players, hps):
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
     max_cost_threshold = hps.get('max_cost_threshold', 5)  # Default to 5 if not specified
@@ -219,7 +223,7 @@ def run_experiments(num_players, hyperparameter_sets):
 
     for hps in hyperparameter_sets:
         logging.info(f'Testing hyperparameters: {hps}')
-        results = [run_game_with_bookings(num_players, hps=hps) for _ in range(1000)]
+        results = [run_game(num_players, hps=hps) for _ in range(1000)]
         average_cards_left = sum(results) / len(results)
         logging.info('Average number of cards left: %s', average_cards_left)
         logging.info(f'Number of wins for {num_players} players: {results.count(0)} in {len(results)} games ({results.count(0) / len(results) * 100}%)')
@@ -265,4 +269,10 @@ if __name__ == "__main__":
         },
         # Add more hyperparameter sets as needed
     ]
-    best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
+    # best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
+    
+    best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
+    # best_hp = {'max_cost_threshold': 8}
+    run_game(4, best_hp)
+    
+
