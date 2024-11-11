@@ -166,6 +166,37 @@ class GameEngine:
     def end_turn(self, cards_played):
         self.game_state.draw_cards(self.game_state.current_player, cards_played)
         self.game_state.next_player()
+    
+    def play_turn(self, current_player_hand):
+        game_lost = False
+        logging.debug(f"Starting turn with hand: {current_player_hand}")
+        cards_played = 0
+
+        while True:
+            best_move = self.rules.find_best_move(self.game_state.current_player, self.game_state)
+            if not best_move:
+                if len(self.game_state.deck) == 0 and cards_played > 0:
+                    break
+                game_lost = True
+                break
+
+            card, pile_name, cost = best_move
+            if cards_played >= 2:
+                if not self.max_cost_threshold:
+                    break
+                elif cost > self.max_cost_threshold:
+                    break
+
+            self.play_card(card, pile_name)
+            self.rules.update_bookings(self.game_state)
+            cards_played += 1
+
+        
+        if not game_lost:
+            self.end_turn(cards_played)
+        
+        return game_lost
+
 
     def play_game(self):
         game_lost = False
@@ -173,36 +204,13 @@ class GameEngine:
         while not self.is_winning_state() and not game_lost:
             current_player_index = self.game_state.current_player_index
             current_player_hand = [c.value for c in self.game_state.current_player.hand]
-            logging.debug(f"Starting turn with hand: {current_player_hand} (Player {current_player_index}) ")
+            
+            game_lost = self.play_turn(current_player_hand)
 
-            cards_played = 0
-
-            while True:
-                best_move = self.rules.find_best_move(self.game_state.current_player, self.game_state)
-                if not best_move:
-                    if len(self.game_state.deck) == 0 and cards_played > 0:
-                        break
-                    game_lost = True
-                    break
-
-                card, pile_name, cost = best_move
-                if cards_played >= 2:
-                    if not self.max_cost_threshold:
-                        break
-                    elif cost > self.max_cost_threshold:
-                        break
-
-                self.play_card(card, pile_name)
-                self.rules.update_bookings(self.game_state)
-                cards_played += 1
-
-            # Log the bookings at the end of the player's turn
             logging.debug(f"End of Player {current_player_index}'s turn. Current bookings:")
+
             for pile_name, pile in self.game_state.piles.items():
                 logging.debug(f"  Pile {pile_name}: {pile.bookings}")
-
-            if not game_lost:
-                self.end_turn(cards_played)
 
         # Log the game result
         if self.is_winning_state():
