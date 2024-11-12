@@ -1,9 +1,10 @@
 import random
 import logging
+import itertools
 from abc import ABC, abstractmethod
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 class Card:
     def __init__(self, value):
@@ -167,7 +168,7 @@ class GameEngine:
         self.game_state.draw_cards(self.game_state.current_player, cards_played)
         self.game_state.next_player()
     
-    def play_turn(self, current_player_hand):
+    def play_turn(self, current_player_hand, min_cards=2):
         game_lost = False
         logging.debug(f"Starting turn with hand: {current_player_hand}")
         cards_played = 0
@@ -181,7 +182,8 @@ class GameEngine:
                 break
 
             card, pile_name, cost = best_move
-            if cards_played >= 2:
+
+            if cards_played >= min_cards:
                 if not self.max_cost_threshold:
                     break
                 elif cost > self.max_cost_threshold:
@@ -198,15 +200,17 @@ class GameEngine:
         return game_lost
 
 
-    def play_game(self):
+    def play_game(self, turn_by_turn_min_cards=None):
         game_lost = False
 
         while not self.is_winning_state() and not game_lost:
             current_player_index = self.game_state.current_player_index
             current_player_hand = [c.value for c in self.game_state.current_player.hand]
             
-            game_lost = self.play_turn(current_player_hand)
-
+            if turn_by_turn_min_cards:
+                game_lost = self.play_turn(current_player_hand, turn_by_turn_min_cards.pop(0))
+            else:
+                game_lost = self.play_turn(current_player_hand)
             logging.debug(f"End of Player {current_player_index}'s turn. Current bookings:")
 
             for pile_name, pile in self.game_state.piles.items():
@@ -214,19 +218,43 @@ class GameEngine:
 
         # Log the game result
         if self.is_winning_state():
-            logging.debug("Game won! All cards have been played.")
+            logging.info("Game won! All cards have been played.")
         else:
             remaining_cards = len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
-            logging.debug(f"Game lost. Cards remaining: {remaining_cards}")
+            logging.info(f"Game lost. Cards remaining: {remaining_cards}")
 
         return len(self.game_state.deck) + sum(len(player.hand) for player in self.game_state.players)
 
-def run_game(num_players, hps):
+def run_game(num_players, hps, turn_by_turn_min_cards=None):
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
     max_cost_threshold = hps.get('max_cost_threshold')  # Default to 5 if not specified
     engine = GameEngine(game_state, rules, max_cost_threshold)
-    return engine.play_game()
+    if turn_by_turn_min_cards:
+        return engine.play_game(turn_by_turn_min_cards)
+    else:
+        engine.play_game()
+
+def run_all_games(num_players, hps):
+    cards_played_options = [2, 3] #, 4, 5, 6]
+    cards_combinations = itertools.product(cards_played_options, repeat=80)
+    max_cost_threshold = hps.get('max_cost_threshold')
+    game_state = GameState(num_players, hps)
+    rules = StandardGameRules(hps)
+    engine = GameEngine(game_state, rules, max_cost_threshold)
+    i = 1
+    for comb in cards_combinations:
+        print(i, comb)
+        i+=1
+        import copy
+        comb_engine = copy.deepcopy(engine)
+        game = comb_engine.play_game(list(comb))
+        if game == 0:
+            print('WOOON', comb)
+            return list(comb)
+            break
+    return 0
+            
 
 def run_experiments(num_players, hyperparameter_sets):
     best_hyperparameters = None
@@ -247,7 +275,7 @@ def run_experiments(num_players, hyperparameter_sets):
     return best_hyperparameters, best_result
 
 if __name__ == "__main__":
-    random.seed(42)
+    random.seed(40)
     num_players = 4
     hyperparameter_sets = [
         {
@@ -282,8 +310,12 @@ if __name__ == "__main__":
     ]
     # best_hyperparameters, best_result = run_experiments(num_players, hyperparameter_sets)
     
-    # best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
+    #best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
     best_hp = {}
     run_game(4, best_hp)
+
+    num_games = 1
+    run_all_games(4, best_hp)
+    #print('Success rate:', sum(games)/num_games)
     
 
