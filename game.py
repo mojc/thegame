@@ -237,21 +237,23 @@ def run_game(num_players, hps, turn_by_turn_min_cards=None):
 
 def run_all_games(num_players, hps):
     cards_played_options = [2, 3] #, 4, 5, 6]
-    cards_combinations = itertools.product(cards_played_options, repeat=80)
+    search_random = random.Random()
+
     max_cost_threshold = hps.get('max_cost_threshold')
     game_state = GameState(num_players, hps)
     rules = StandardGameRules(hps)
     engine = GameEngine(game_state, rules, max_cost_threshold)
     i = 1
-    for comb in cards_combinations:
-        print(i, comb)
+    for _ in range(3000):
+        comb = [search_random.choice(cards_played_options) for _ in range(122)]
+        # print(i, comb)
         i+=1
         import copy
         comb_engine = copy.deepcopy(engine)
-        game = comb_engine.play_game(list(comb))
+        game = comb_engine.play_game(comb)
         if game == 0:
             print('WOOON', comb)
-            return list(comb)
+            return 1
             break
     return 0
             
@@ -312,10 +314,10 @@ if __name__ == "__main__":
     
     #best_hp = {'booking_penalties': {-9: 10, 7: 5, 14: 2}, 'max_cost_threshold': 8}
     best_hp = {}
-    run_game(4, best_hp)
+    # run_game(4, best_hp)
 
-    num_games = 1
-    run_all_games(4, best_hp)
-    #print('Success rate:', sum(games)/num_games)
+    num_games = 100
+    games = [run_all_games(4, best_hp) for _ in range(num_games)]
+    print('Success rate:', sum(games)/num_games * 100, '%')
     
 
